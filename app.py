@@ -16,7 +16,7 @@ from sklearn.metrics import (
 )
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Telco Churn Prediction Dashboard",
@@ -28,7 +28,7 @@ st.title("📊 Telco Customer Churn Prediction Dashboard")
 st.markdown("Compare multiple machine learning models interactively.")
 
 # ---------------------------------------------------------
-# LOAD MODELS (CACHED)
+# LOAD MODELS
 # ---------------------------------------------------------
 @st.cache_resource
 def load_models():
@@ -44,11 +44,10 @@ def load_models():
     feature_columns = joblib.load("model/feature_columns.pkl")
     return models, scaler, feature_columns
 
-
 models, scaler, feature_columns = load_models()
 
 # ---------------------------------------------------------
-# SIDEBAR CONTROLS
+# SIDEBAR
 # ---------------------------------------------------------
 st.sidebar.header("⚙️ Controls")
 
@@ -63,7 +62,27 @@ uploaded_file = st.sidebar.file_uploader(
 )
 
 # ---------------------------------------------------------
-# FILE HANDLING
+# DOWNLOAD TEST DATA (FIXED PROPERLY)
+# ---------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("⬇️ Download Sample Test Data")
+
+try:
+    with open("test_data.csv", "rb") as f:
+        file_bytes = f.read()
+
+    st.sidebar.download_button(
+        label="Download test_data.csv",
+        data=file_bytes,
+        file_name="test_data.csv",
+        mime="text/csv",
+    )
+
+except FileNotFoundError:
+    st.sidebar.info("test_data.csv not found in project directory.")
+
+# ---------------------------------------------------------
+# FILE LOADER
 # ---------------------------------------------------------
 def load_data(file):
     file_type = file.name.split(".")[-1]
@@ -77,7 +96,9 @@ def load_data(file):
     else:
         return None
 
-
+# ---------------------------------------------------------
+# MAIN LOGIC
+# ---------------------------------------------------------
 if uploaded_file is not None:
 
     data = load_data(uploaded_file)
@@ -93,9 +114,7 @@ if uploaded_file is not None:
         st.error("Uploaded file must contain a 'Churn' column.")
         st.stop()
 
-    # ---------------------------------------------------------
-    # TARGET PROCESSING
-    # ---------------------------------------------------------
+    # Target Processing
     if data["Churn"].dtype == "object":
         y_test = data["Churn"].map({"Yes": 1, "No": 0})
     else:
@@ -106,33 +125,21 @@ if uploaded_file is not None:
     X_test = data.drop("Churn", axis=1)
     X_test = X_test[valid_idx]
 
-    if len(y_test) == 0:
-        st.error("No valid target values found.")
-        st.stop()
-
-    # ---------------------------------------------------------
-    # ENCODING
-    # ---------------------------------------------------------
+    # Encoding
     X_test = pd.get_dummies(X_test, drop_first=True)
     X_test = X_test.reindex(columns=feature_columns, fill_value=0)
 
-    # ---------------------------------------------------------
-    # SCALING
-    # ---------------------------------------------------------
+    # Scaling
     if model_name in ["Logistic Regression", "KNN", "Naive Bayes"]:
         X_test = scaler.transform(X_test)
 
     model = models[model_name]
 
-    # ---------------------------------------------------------
-    # PREDICTIONS
-    # ---------------------------------------------------------
+    # Predictions
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
-    # ---------------------------------------------------------
-    # METRICS
-    # ---------------------------------------------------------
+    # Metrics
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
@@ -142,7 +149,6 @@ if uploaded_file is not None:
 
     st.subheader("📈 Model Performance")
 
-    # -------- Styled Metric Function --------
     def styled_metric(label, value, highlight=False):
         color = "#1f77b4" if highlight else "#333"
         bg = "#e8f2ff" if highlight else "#f4f4f4"
@@ -172,62 +178,31 @@ if uploaded_file is not None:
 
     with col1:
         styled_metric("Accuracy", accuracy, highlight=True)
-
     with col2:
         styled_metric("Precision", precision)
-
     with col3:
         styled_metric("Recall", recall)
-
     with col4:
         styled_metric("F1 Score", f1)
-
     with col5:
         styled_metric("AUC Score", auc, highlight=True)
-
     with col6:
         styled_metric("MCC Score", mcc)
 
-    # ---------------------------------------------------------
-    # ROC CURVE
-    # ---------------------------------------------------------
+    # ROC Curve
     st.subheader("📉 ROC Curve")
-
     fpr, tpr, _ = roc_curve(y_test, y_prob)
-
     fig1, ax1 = plt.subplots()
     ax1.plot(fpr, tpr)
     ax1.plot([0, 1], [0, 1])
-    ax1.set_xlabel("False Positive Rate")
-    ax1.set_ylabel("True Positive Rate")
-    ax1.set_title("ROC Curve")
     st.pyplot(fig1)
 
-    # ---------------------------------------------------------
-    # CONFUSION MATRIX
-    # ---------------------------------------------------------
+    # Confusion Matrix
     st.subheader("🔢 Confusion Matrix")
-
     cm = confusion_matrix(y_test, y_pred)
-
     fig2, ax2 = plt.subplots()
     sns.heatmap(cm, annot=True, fmt="d", ax=ax2)
-    ax2.set_xlabel("Predicted")
-    ax2.set_ylabel("Actual")
     st.pyplot(fig2)
-
-    # ---------------------------------------------------------
-    # METRIC EXPLANATION
-    # ---------------------------------------------------------
-    with st.expander("ℹ️ What do these metrics mean?"):
-        st.write("""
-        - **Accuracy**: Overall correctness of the model  
-        - **Precision**: Percentage of predicted churn cases that were correct  
-        - **Recall**: Percentage of actual churn cases detected  
-        - **F1 Score**: Balance between precision and recall  
-        - **AUC**: Model's ability to distinguish between classes  
-        - **MCC**: Balanced measure even for imbalanced datasets  
-        """)
 
 else:
     st.info("Upload a dataset from the sidebar to begin.")
