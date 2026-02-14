@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -8,100 +11,91 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
     matthews_corrcoef,
-    confusion_matrix
+    confusion_matrix,
+    roc_curve
 )
 
-# -------------------------------
-# Page Configuration
-# -------------------------------
+# ---------------------------------------------------------
+# PAGE CONFIGURATION
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Telco Churn ML App",
+    page_title="Telco Churn Prediction Dashboard",
+    page_icon="📊",
     layout="wide"
 )
 
-# -------------------------------
-# Custom CSS Styling
-# -------------------------------
-st.markdown("""
-    <style>
-        .main {
-            background-color: #f5f7fa;
-        }
-        .title-style {
-            font-size: 36px;
-            font-weight: bold;
-            color: #1f4e79;
-        }
-        .section-header {
-            font-size: 24px;
-            font-weight: bold;
-            color: #0e6ba8;
-            margin-top: 20px;
-        }
-        .metric-container {
-            background-color: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-        }
-    </style>
-""", unsafe_allow_html=True)
+st.title("📊 Telco Customer Churn Prediction Dashboard")
+st.markdown("Compare multiple machine learning models interactively.")
 
-# -------------------------------
-# Title
-# -------------------------------
-st.markdown('<p class="title-style">📊 Telco Customer Churn Prediction App</p>', unsafe_allow_html=True)
-st.write("Upload RAW test dataset (original columns) to evaluate trained ML models.")
+# ---------------------------------------------------------
+# LOAD MODELS (CACHED)
+# ---------------------------------------------------------
+@st.cache_resource
+def load_models():
+    models = {
+        "Logistic Regression": joblib.load("model/logistic_model.pkl"),
+        "Decision Tree": joblib.load("model/decision_tree_model.pkl"),
+        "KNN": joblib.load("model/knn_model.pkl"),
+        "Naive Bayes": joblib.load("model/naive_bayes_model.pkl"),
+        "Random Forest": joblib.load("model/random_forest_model.pkl"),
+        "XGBoost": joblib.load("model/xgboost_model.pkl"),
+    }
+    scaler = joblib.load("model/scaler.pkl")
+    feature_columns = joblib.load("model/feature_columns.pkl")
+    return models, scaler, feature_columns
 
-# -------------------------------
-# Load Models & Utilities
-# -------------------------------
-log_model = joblib.load("model/logistic_model.pkl")
-dt_model = joblib.load("model/decision_tree_model.pkl")
-knn_model = joblib.load("model/knn_model.pkl")
-nb_model = joblib.load("model/naive_bayes_model.pkl")
-rf_model = joblib.load("model/random_forest_model.pkl")
-xgb_model = joblib.load("model/xgboost_model.pkl")
 
-scaler = joblib.load("model/scaler.pkl")
-feature_columns = joblib.load("model/feature_columns.pkl")
+models, scaler, feature_columns = load_models()
 
-# -------------------------------
-# Model Selection
-# -------------------------------
-st.markdown('<p class="section-header">🔍 Select Model</p>', unsafe_allow_html=True)
+# ---------------------------------------------------------
+# SIDEBAR CONTROLS
+# ---------------------------------------------------------
+st.sidebar.header("⚙️ Controls")
 
-model_name = st.selectbox(
-    "",
-    [
-        "Logistic Regression",
-        "Decision Tree",
-        "KNN",
-        "Naive Bayes",
-        "Random Forest",
-        "XGBoost"
-    ]
+model_name = st.sidebar.selectbox(
+    "Select Model",
+    list(models.keys())
 )
 
-# -------------------------------
-# File Upload
-# -------------------------------
-st.markdown('<p class="section-header">📁 Upload Test Dataset</p>', unsafe_allow_html=True)
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Test Dataset",
+    type=["csv", "xlsx", "xls", "json"]
+)
 
-uploaded_file = st.file_uploader("", type=["csv"])
+# ---------------------------------------------------------
+# FILE HANDLING
+# ---------------------------------------------------------
+def load_data(file):
+    file_type = file.name.split(".")[-1]
+
+    if file_type == "csv":
+        return pd.read_csv(file)
+    elif file_type in ["xlsx", "xls"]:
+        return pd.read_excel(file)
+    elif file_type == "json":
+        return pd.read_json(file)
+    else:
+        return None
+
 
 if uploaded_file is not None:
 
-    data = pd.read_csv(uploaded_file)
+    data = load_data(uploaded_file)
 
-    st.markdown('<p class="section-header">📄 Data Preview</p>', unsafe_allow_html=True)
-    st.dataframe(data.head())
-
-    if "Churn" not in data.columns:
-        st.error("Uploaded file must contain 'Churn' column.")
+    if data is None:
+        st.error("Unsupported file format.")
         st.stop()
 
-    # Target Handling
+    st.subheader("📄 Data Preview")
+    st.dataframe(data.head(), use_container_width=True)
+
+    if "Churn" not in data.columns:
+        st.error("Uploaded file must contain a 'Churn' column.")
+        st.stop()
+
+    # ---------------------------------------------------------
+    # TARGET PROCESSING
+    # ---------------------------------------------------------
     if data["Churn"].dtype == "object":
         y_test = data["Churn"].map({"Yes": 1, "No": 0})
     else:
@@ -116,31 +110,29 @@ if uploaded_file is not None:
         st.error("No valid target values found.")
         st.stop()
 
-    # Encoding
+    # ---------------------------------------------------------
+    # ENCODING
+    # ---------------------------------------------------------
     X_test = pd.get_dummies(X_test, drop_first=True)
     X_test = X_test.reindex(columns=feature_columns, fill_value=0)
 
-    # Scaling if required
+    # ---------------------------------------------------------
+    # SCALING
+    # ---------------------------------------------------------
     if model_name in ["Logistic Regression", "KNN", "Naive Bayes"]:
         X_test = scaler.transform(X_test)
 
-    # Select Model
-    model_dict = {
-        "Logistic Regression": log_model,
-        "Decision Tree": dt_model,
-        "KNN": knn_model,
-        "Naive Bayes": nb_model,
-        "Random Forest": rf_model,
-        "XGBoost": xgb_model
-    }
+    model = models[model_name]
 
-    model = model_dict[model_name]
-
-    # Predictions
+    # ---------------------------------------------------------
+    # PREDICTIONS
+    # ---------------------------------------------------------
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
-    # Metrics
+    # ---------------------------------------------------------
+    # METRICS
+    # ---------------------------------------------------------
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
@@ -148,23 +140,94 @@ if uploaded_file is not None:
     auc = roc_auc_score(y_test, y_prob)
     mcc = matthews_corrcoef(y_test, y_pred)
 
-    # -------------------------------
-    # Display Metrics
-    # -------------------------------
-    st.markdown('<p class="section-header">📈 Model Performance</p>', unsafe_allow_html=True)
+    st.subheader("📈 Model Performance")
+
+    # -------- Styled Metric Function --------
+    def styled_metric(label, value, highlight=False):
+        color = "#1f77b4" if highlight else "#333"
+        bg = "#e8f2ff" if highlight else "#f4f4f4"
+
+        st.markdown(
+            f"""
+            <div style="
+                background-color:{bg};
+                padding:20px;
+                border-radius:12px;
+                text-align:center;
+                margin-bottom:15px;
+            ">
+                <div style="font-size:18px; font-weight:600; color:{color};">
+                    {label}
+                </div>
+                <div style="font-size:32px; font-weight:bold; color:{color};">
+                    {value:.4f}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Accuracy", f"{accuracy:.4f}")
-    col2.metric("Precision", f"{precision:.4f}")
-    col3.metric("Recall", f"{recall:.4f}")
-
     col4, col5, col6 = st.columns(3)
-    col4.metric("F1 Score", f"{f1:.4f}")
-    col5.metric("AUC Score", f"{auc:.4f}")
-    col6.metric("MCC Score", f"{mcc:.4f}")
 
-    # -------------------------------
-    # Confusion Matrix
-    # -------------------------------
-    st.markdown('<p class="section-header">🔢 Confusion Matrix</p>', unsafe_allow_html=True)
-    st.write(confusion_matrix(y_test, y_pred))
+    with col1:
+        styled_metric("Accuracy", accuracy, highlight=True)
+
+    with col2:
+        styled_metric("Precision", precision)
+
+    with col3:
+        styled_metric("Recall", recall)
+
+    with col4:
+        styled_metric("F1 Score", f1)
+
+    with col5:
+        styled_metric("AUC Score", auc, highlight=True)
+
+    with col6:
+        styled_metric("MCC Score", mcc)
+
+    # ---------------------------------------------------------
+    # ROC CURVE
+    # ---------------------------------------------------------
+    st.subheader("📉 ROC Curve")
+
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+
+    fig1, ax1 = plt.subplots()
+    ax1.plot(fpr, tpr)
+    ax1.plot([0, 1], [0, 1])
+    ax1.set_xlabel("False Positive Rate")
+    ax1.set_ylabel("True Positive Rate")
+    ax1.set_title("ROC Curve")
+    st.pyplot(fig1)
+
+    # ---------------------------------------------------------
+    # CONFUSION MATRIX
+    # ---------------------------------------------------------
+    st.subheader("🔢 Confusion Matrix")
+
+    cm = confusion_matrix(y_test, y_pred)
+
+    fig2, ax2 = plt.subplots()
+    sns.heatmap(cm, annot=True, fmt="d", ax=ax2)
+    ax2.set_xlabel("Predicted")
+    ax2.set_ylabel("Actual")
+    st.pyplot(fig2)
+
+    # ---------------------------------------------------------
+    # METRIC EXPLANATION
+    # ---------------------------------------------------------
+    with st.expander("ℹ️ What do these metrics mean?"):
+        st.write("""
+        - **Accuracy**: Overall correctness of the model  
+        - **Precision**: Percentage of predicted churn cases that were correct  
+        - **Recall**: Percentage of actual churn cases detected  
+        - **F1 Score**: Balance between precision and recall  
+        - **AUC**: Model's ability to distinguish between classes  
+        - **MCC**: Balanced measure even for imbalanced datasets  
+        """)
+
+else:
+    st.info("Upload a dataset from the sidebar to begin.")
