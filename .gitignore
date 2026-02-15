@@ -3,8 +3,7 @@ venv/
 
 
 
-# Ignore notebooks
-*.ipynb
+
 
 # Ignore cache
 __pycache__/
