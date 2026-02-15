@@ -128,6 +128,7 @@ A Streamlit application was developed with the following features:
 ---
 
 ## 📦 9. Project Structure
+```
 
 telco-churn-classification/
 │-- app.py
@@ -145,6 +146,7 @@ telco-churn-classification/
 
 
 ---
+```
 
 ## 🛠 10. Technologies Used
 
