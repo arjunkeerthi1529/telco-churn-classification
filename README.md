@@ -95,13 +95,17 @@ These metrics help measure both prediction performance and handling of class imb
 
 ---
 
-## 🔎 7. Observations
+## 🔎 7. Model Observations
 
-- Logistic Regression achieved the highest overall balanced performance and the best MCC score.
-- XGBoost achieved a high AUC score and strong probability ranking.
-- Random Forest significantly improved over a single Decision Tree due to ensemble learning.
-- Naive Bayes achieved high recall, making it useful when detecting churn cases is more important than precision.
-- Decision Tree showed weaker generalization compared to ensemble methods.
+| ML Model Name | Observation about Model Performance |
+|--------------|--------------------------------------|
+| Logistic Regression | Achieved the best overall balanced performance with highest Accuracy (0.8038) and MCC (0.4803). Demonstrated strong generalization ability and stable predictions on this dataset. |
+| Decision Tree | Showed lower performance compared to other models. Likely overfitting due to high variance, resulting in weaker generalization and lower AUC (0.6403). |
+| kNN | Performed moderately well. Sensitive to feature scaling and distance metric. Accuracy and F1 were better than Decision Tree but lower than ensemble models. |
+| Naive Bayes | Achieved very high Recall (0.8636) but lower Precision, meaning it detects most churn cases but produces more false positives. Suitable when recall is prioritized. |
+| Random Forest (Ensemble) | Improved performance over single Decision Tree. Reduced overfitting and achieved strong Accuracy (0.7896) and AUC (0.8176), though Recall remained moderate. |
+| XGBoost (Ensemble) | Delivered high AUC (0.8348) and strong overall performance. Effective gradient boosting improved predictive capability, though slightly lower Accuracy than Logistic Regression. |
+
 
 Overall, Logistic Regression provided the best balance of accuracy, AUC, and MCC for this dataset.
 
